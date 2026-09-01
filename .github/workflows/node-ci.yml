@@ -1,0 +1,59 @@
+name: Node CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use
+        type: string
+        default: '22'
+      package-manager:
+        description: npm or pnpm
+        type: string
+        default: 'npm'
+      prisma:
+        description: Run `npx prisma generate` before typecheck/build
+        type: boolean
+        default: false
+      run-build:
+        description: Run the build step
+        type: boolean
+        default: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack (pnpm)
+        if: inputs.package-manager == 'pnpm'
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+
+      - name: Install dependencies (npm)
+        if: inputs.package-manager == 'npm'
+        run: npm ci
+
+      - name: Install dependencies (pnpm)
+        if: inputs.package-manager == 'pnpm'
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        if: inputs.prisma
+        run: npx prisma generate
+
+      - name: Lint
+        run: ${{ inputs.package-manager }} run lint --if-present
+
+      - name: Typecheck
+        if: hashFiles('tsconfig.json') != ''
+        run: npx tsc --noEmit
+
+      - name: Build
+        if: inputs.run-build
+        run: ${{ inputs.package-manager }} run build --if-present
